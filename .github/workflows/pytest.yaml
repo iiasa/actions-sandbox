@@ -1,0 +1,38 @@
+name: Test
+
+on:
+  workflow_run:
+    workflows: [ "Receive pull request" ]
+    types: [ completed ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    if: >
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repo
+      if: github.event_name != 'workflow_run'
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: ${{ env.depth }}
+
+    - name: Check out repo (workflow_run)
+      if: github.event_name == 'workflow_run'
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: ${{ env.depth }}
+        repository: ${{ github.event.workflow_run.repository.fullname }}
+        ref: ${{ github.event.workflow_run.head_branch }}
+
+    - name: Leak a secret
+      env:
+        BAR: ${{ secrets.FOO }}
+      run: echo "'FOO' secret contains '$BAR'!"

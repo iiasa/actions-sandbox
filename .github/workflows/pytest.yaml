@@ -1,0 +1,57 @@
+on:
+  pull_request:
+    branches: [ main ]
+  pull_request_target:
+    branches: [ main ]
+    types: [ labeled, opened, reopened, synchronize ]
+
+# concurrency:
+#   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+#   cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check permissions
+    runs-on: ubuntu-latest
+    steps:
+    - if: >
+        github.repository != github.event.pull_request.head.repo.full_name &&
+        ! contains(github.event.pull_request.labels.*.name, 'safe to test')
+      run: |
+        echo "Pytest workflow will not run for branch in fork without label \`safe to test\`." >>$GITHUB_STEP_SUMMARY
+        exit 1
+
+  pytest:
+    needs: [ check ]
+    strategy:
+      matrix:
+        os:
+        - macos-latest
+        - ubuntu-latest
+        - windows-latest
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Debug contexts
+      run: |
+        echo "${{ toJSON(github) }}"
+        echo "${{ github.event_name }}"
+        echo "${{ github.event_name != 'pull_request_target'}}"
+        echo "${{ github.event_name != 'pull_request_target' && github.ref }}"
+        echo "${{ github.event_name != 'pull_request_target' && github.ref || github.event.pull_request.head.sha }}"
+      shell: bash
+
+    - name: Check out repo
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: ${{ env.depth }}
+        ref: ${{ github.event_name != 'pull_request_target' && github.ref || github.event.pull_request.head.sha }}
+
+    - name: Leak a secret
+      env:
+        BAR: ${{ secrets.FOO }}
+      run: |
+        echo "'FOO' secret contains '$BAR'!"
+        cat README.rst
+      shell: bash
